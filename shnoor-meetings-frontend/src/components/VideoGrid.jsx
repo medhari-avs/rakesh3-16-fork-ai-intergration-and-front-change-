@@ -5,12 +5,21 @@ function VideoPlayer({ stream, isLocal = false, isHandRaised = false }) {
 
   useEffect(() => {
     if (videoRef.current && stream) {
+      console.log('Attaching stream to video', stream.id, stream.getTracks());
       videoRef.current.srcObject = stream;
     }
   }, [stream]);
 
+  const hasVideo = stream && stream.getVideoTracks().length > 0;
+  const isVideoEnabled = hasVideo && stream.getVideoTracks()[0].enabled;
+
   return (
     <div className="relative w-full aspect-video bg-gray-800 rounded-2xl overflow-hidden shadow-2xl border border-gray-700/50 group flex items-center justify-center">
+      {!isVideoEnabled && (
+        <div className="absolute inset-0 flex items-center justify-center text-white z-10 text-sm opacity-50">
+          No active video track
+        </div>
+      )}
       <video
         ref={videoRef}
         autoPlay
@@ -26,13 +35,13 @@ function VideoPlayer({ stream, isLocal = false, isHandRaised = false }) {
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+      <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between z-20">
         <div className="bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-lg text-white text-sm font-semibold tracking-wide border border-white/10 shadow-lg">
-          {isLocal ? 'You' : 'Participant'}
+          {isLocal ? 'You' : 'Participant'} {stream ? (isVideoEnabled ? '(Cam On)' : '(Cam Off)') : '(No Stream)'}
         </div>
       </div>
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10" />
     </div>
   );
 }

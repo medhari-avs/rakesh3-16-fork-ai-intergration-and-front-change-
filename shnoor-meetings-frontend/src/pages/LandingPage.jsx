@@ -33,9 +33,12 @@ export default function LandingPage() {
   const handleStartInstantMeeting = async () => {
     setIsLoading(true);
     setShowDropdown(false);
+    const storedName = localStorage.getItem('guest_display_name') || 'Host';
     try {
       const response = await fetch('http://localhost:8000/api/meetings/create', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host_name: storedName }),
       });
       const data = await response.json();
       if (data.room_id) {
@@ -53,9 +56,12 @@ export default function LandingPage() {
   const handleCreateMeetingLater = async () => {
     setIsLoading(true);
     setShowDropdown(false);
+    const storedName = localStorage.getItem('guest_display_name') || 'Host';
     try {
       const response = await fetch('http://localhost:8000/api/meetings/create', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host_name: storedName }),
       });
       const data = await response.json();
       if (data.room_id) {

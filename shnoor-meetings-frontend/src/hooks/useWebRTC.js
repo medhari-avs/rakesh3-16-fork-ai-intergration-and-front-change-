@@ -15,7 +15,6 @@ export function useWebRTC(roomId) {
   const [participantsMetadata, setParticipantsMetadata] = useState({});
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [mediaError, setMediaError] = useState(null);
-  const [activeJoinRequests, setActiveJoinRequests] = useState([]); // {id, name}
   
   const isHost = useRef(localStorage.getItem(`meeting_host_${roomId}`) === 'true');
   
@@ -31,9 +30,17 @@ export function useWebRTC(roomId) {
 
   // Initialize Media and WebSocket Setup
   useEffect(() => {
+    let mounted = true;
     const startConnection = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        
+        if (!mounted) {
+          // If the component unmounted before we got the stream, stop all tracks immediately
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
         originalStream.current = stream;
         activeStreamsRef.current.push(stream);
         setLocalStream(stream);
@@ -45,8 +52,9 @@ export function useWebRTC(roomId) {
           handleSignalingData(msg, stream);
         };
       } catch (err) {
+        if (!mounted) return;
         console.error("Error accessing media devices.", err);
-        setMediaError(err.name === 'NotAllowedError' ? 'Permission Denied' : 'Media Device Error');
+        setMediaError(err.name === 'NotAllowedError' ? 'Permission Denied' : err.message || 'Media Device Error');
       }
     };
 
@@ -54,6 +62,7 @@ export function useWebRTC(roomId) {
 
     return () => {
       console.log("Cleaning up WebRTC session and stopping all media tracks...");
+      mounted = false;
       
       // Stop every track in every stream we've opened
       activeStreamsRef.current.forEach(stream => {
@@ -186,34 +195,13 @@ export function useWebRTC(roomId) {
         }));
         break;
 
-      case 'join-request':
-        if (isHost.current) {
-          setActiveJoinRequests(prev => {
-            if (prev.find(r => r.id === sender)) return prev;
-            return [...prev, { id: sender, name: data.name || 'Anonymous' }];
-          });
-        }
-        break;
-
-      case 'admit':
-        if (target === clientId.current) {
-          // Trigger a callback or state change to navigate
-          window.dispatchEvent(new CustomEvent('meeting-admitted', { detail: { roomId } }));
-        }
+      case 'caption':
+        window.dispatchEvent(new CustomEvent('new-caption', { detail: data.text }));
         break;
 
       default:
         break;
     }
-  };
-
-  const admitParticipant = (participantId) => {
-    sendSignalingMessage({ type: 'admit', target: participantId });
-    setActiveJoinRequests(prev => prev.filter(r => r.id !== participantId));
-  };
-
-  const requestToJoin = (name) => {
-    sendSignalingMessage({ type: 'join-request', name });
   };
 
   const sendSignalingMessage = (msg) => {
@@ -298,6 +286,10 @@ export function useWebRTC(roomId) {
     addMessage({ sender: 'Me', text }); // optimistic local update
   };
 
+  const sendCaptionMessage = (text) => {
+    sendSignalingMessage({ type: 'caption', text });
+  };
+
   return {
     localStream,
     remoteStreams,
@@ -310,9 +302,7 @@ export function useWebRTC(roomId) {
     toggleScreenShare,
     toggleRaiseHand,
     sendChatMessage,
-    admitParticipant,
-    requestToJoin,
-    activeJoinRequests,
+    sendCaptionMessage,
     isHost: isHost.current,
     mediaError
   };

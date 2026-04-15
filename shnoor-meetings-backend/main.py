@@ -5,7 +5,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 from core.database import init_db
-from routers import meeting, signaling, calendar
+from routers import meeting, signaling, calendar, transcribe
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +36,7 @@ app.add_middleware(
 app.include_router(meeting.router)
 app.include_router(signaling.router)
 app.include_router(calendar.router)
+app.include_router(transcribe.router)
 
 @app.get("/")
 async def root():

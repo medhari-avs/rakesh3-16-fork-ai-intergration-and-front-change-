@@ -16,16 +16,15 @@ export default function LobbyPage() {
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
-  const [isWaiting, setIsWaiting] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEffectsModule, setShowEffectsModule] = useState(false);
   const [videoEffect, setVideoEffect] = useState('none');
-  
+  // Guest mode: display name required before joining
+  const [displayName, setDisplayName] = useState(() => localStorage.getItem('guest_display_name') || '');
+  const [isJoining, setIsJoining] = useState(false);
+
   const { 
-    isHost, 
-    activeJoinRequests, 
-    admitParticipant, 
-    requestToJoin 
+    isHost 
   } = useWebRTC(roomId);
 
   const toastTimeoutRef = useRef(null);
@@ -92,26 +91,29 @@ export default function LobbyPage() {
     }
   };
 
-  useEffect(() => {
-    const handleAdmitted = (e) => {
-      if (e.detail.roomId === roomId) {
-        joinMeeting();
-      }
-    };
-    window.addEventListener('meeting-admitted', handleAdmitted);
-    return () => window.removeEventListener('meeting-admitted', handleAdmitted);
-  }, [roomId]);
 
-  const handleAskToJoin = () => {
-    setIsWaiting(true);
-    requestToJoin("Guest"); 
-    showToast("Join request sent. Waiting for host...");
-  };
 
-  const joinMeeting = () => {
+  const joinMeeting = async () => {
+    if (!displayName.trim()) {
+      showToast('Please enter your name before joining.');
+      return;
+    }
+    setIsJoining(true);
+    // Save name to localStorage so MeetingRoom can read it
+    localStorage.setItem('guest_display_name', displayName.trim());
+    try {
+      await fetch(`http://localhost:8000/api/meetings/${roomId}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: displayName.trim() }),
+      });
+    } catch (err) {
+      console.warn('Could not record join — proceeding anyway:', err);
+    }
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
+    setIsJoining(false);
     navigate(`/meeting/${roomId}`);
   };
 
@@ -215,74 +217,47 @@ export default function LobbyPage() {
         {/* Right Side: Join Panel */}
         <div className="flex-1 w-full max-w-sm flex flex-col items-center justify-center space-y-6">
           <h2 className="text-3xl font-normal text-gray-800">Ready to join?</h2>
-          
 
+          {/* Name Input */}
+          <div className="w-full">
+            <label className="block text-sm font-medium text-gray-600 mb-1.5 ml-1">Your name</label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-3.5 flex items-center pointer-events-none text-gray-400">
+                <User size={16} />
+              </span>
+              <input
+                id="display-name-input"
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && joinMeeting()}
+                placeholder="Enter your name"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-gray-800 transition-all placeholder-gray-400 text-sm"
+                autoFocus
+                maxLength={40}
+              />
+            </div>
+          </div>
 
-          <div className="w-full space-y-4 pt-4">
-            {isHost ? (
-              <div className="space-y-4 w-full">
-                <button 
-                  onClick={joinMeeting}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-full shadow-lg shadow-blue-100 transition-all transform active:scale-95 text-md flex items-center justify-center gap-2"
-                >
-                  <LogIn size={20} />
-                  Start Meeting
-                </button>
+          <div className="w-full space-y-4">
+            <div className="space-y-4 w-full">
+              <button 
+                onClick={joinMeeting}
+                disabled={!displayName.trim() || isJoining}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-full shadow-lg shadow-blue-100 transition-all transform active:scale-95 text-md flex items-center justify-center gap-2"
+              >
+                <LogIn size={20} />
+                {isJoining ? 'Joining...' : 'Join Meeting'}
+              </button>
 
-                <button 
-                  onClick={() => setShowInviteModal(true)}
-                  className="w-full bg-white border border-gray-300 text-gray-700 font-medium py-3 rounded-full hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
-                >
-                  <Link size={18} />
-                  Invite people
-                </button>
-                
-                {activeJoinRequests.length > 0 && (
-                  <div className="mt-8 text-left animate-in slide-in-from-bottom-4 duration-500">
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Waiting to join ({activeJoinRequests.length})</h3>
-                    <div className="space-y-2">
-                      {activeJoinRequests.map(req => (
-                        <div key={req.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                              {req.name.charAt(0)}
-                            </div>
-                            <span className="text-sm font-medium text-gray-700">{req.name}</span>
-                          </div>
-                          <div className="flex gap-2">
-                            <button 
-                              onClick={() => admitParticipant(req.id)}
-                              className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                              title="Admit"
-                            >
-                              <Check size={16} />
-                            </button>
-                            <button className="p-1.5 bg-gray-200 text-gray-500 rounded-lg hover:bg-gray-300 transition-colors" title="Deny">
-                              <X size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                <button 
-                  onClick={handleAskToJoin}
-                  disabled={isWaiting}
-                  className={`w-full font-semibold py-3.5 rounded-full shadow-lg transition-all transform active:scale-95 text-md ${isWaiting ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-100'}`}
-                >
-                  {isWaiting ? 'Waiting to be let in...' : 'Ask to join'}
-                </button>
-                
-                <button className="w-full flex items-center justify-center gap-2 text-gray-700 hover:bg-gray-100 font-medium py-3 rounded-md border border-gray-200 transition-all text-sm group">
-                  Other ways to join
-                  <ChevronDown size={16} className="text-gray-400 group-hover:text-gray-600" />
-                </button>
-              </>
-            )}
+              <button 
+                onClick={() => setShowInviteModal(true)}
+                className="w-full bg-white border border-gray-300 text-gray-700 font-medium py-3 rounded-full hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+              >
+                <Link size={18} />
+                Invite people
+              </button>
+            </div>
           </div>
         </div>
       </main>
